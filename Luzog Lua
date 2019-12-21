@@ -19,7 +19,7 @@ local essentialsmenu = gui.Checkbox(menuloc, "LuzogLua", "Show Luzog Lua", false
 		local hvhgroupbox = gui.Groupbox(window, "HvH", 10, 320, 230, 125)
 		local autogroupbox = gui.Groupbox(window, "Auto", 260, 20, 230, 400)
 
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ----- Bomb Timer
 
@@ -248,6 +248,42 @@ function disablepp()
 if disablepost:GetValue() then client_SetConVar("mat_postprocess_enable", 0, true); else client_SetConVar("mat_postprocess_enable", 1, true); end end
 cb_Register('Draw', "Disable Post Processing" ,disablepp);
 
+----- Legit ZeusBot
+
+local GetLocalPlayer, gui_GetValue, gui_SetValue = entities.GetLocalPlayer, gui.GetValue, gui.SetValue
+
+local zeusbot = gui.Checkbox(miscgroupbox, "lbot_zeusbot_enable", "Zeusbot", false)
+local trige, trigaf, trighc, trigm
+local set_values = false
+
+callbacks.Register("Draw", 'Uses Triggerbot to autoshoot Zeus', function()
+	if not zeusbot:GetValue() or GetLocalPlayer() == nil then 
+		return 
+	end 
+
+	local weapon = GetLocalPlayer():GetPropEntity("m_hActiveWeapon")
+	local alive = weapon ~= nil and GetLocalPlayer():IsAlive()
+	local ready = alive and weapon:GetClass() == "CWeaponTaser"
+
+	if ready then 
+		gui_SetValue("lbot_trg_enable", 1) 
+		gui_SetValue("lbot_trg_autofire", 1)
+		gui_SetValue("lbot_trg_hitchance", gui_GetValue("rbot_taser_hitchance"))
+		gui_SetValue("lbot_trg_mode", 0) 
+		set_values = true
+	else
+		if not set_values then
+			trige, trigaf, trighc, trigm = gui_GetValue("lbot_trg_enable"), gui_GetValue("lbot_trg_autofire"), gui_GetValue("lbot_trg_hitchance"), gui_GetValue("lbot_trg_mode")
+		else
+			gui_SetValue("lbot_trg_enable", trige)
+			gui_SetValue("lbot_trg_autofire", trigaf)
+			gui_SetValue("lbot_trg_hitchance", trighc)
+			gui_SetValue("lbot_trg_mode", trigm)
+			set_values = false
+		end
+	end 
+end)
+
 ----- Grenate Timer
 
 local enable = gui.Checkbox(miscgroupbox, "esp_molotovesp", "Molotov ESP", false)
@@ -363,6 +399,94 @@ callbacks.Register("CreateMove", function(pCmd)
         elseif shouldRecover then
             gui.SetValue("msc_fakelag_enable", 1)
             shouldRecover = false
+        end
+    end
+end)
+
+----- AA Angle Lines
+
+local pos = gui.Reference("RAGE", "MAIN", "Anti-Aim Main");
+local enabled = gui.Checkbox(hvhgroupbox, "suyu_antiaimlines_enabled", "Anti-Aim Lines", 0);
+
+
+local rx, ry;
+local fx, fy;
+local fx2, fy2;
+local lby;
+local pLocal = entities.GetLocalPlayer();
+local choking;
+local lastChoke;
+
+local function AngleVectors(angles)
+
+    local sp, sy, cp, cy;
+    local forward = { }
+
+    sy = math.sin(math.rad(angles[2]));
+	cy = math.cos(math.rad(angles[2]));
+
+	sp = math.sin(math.rad(angles[1]));
+	cp = math.cos(math.rad(angles[1]));
+
+	forward[1] = cp*cy;
+	forward[2] = cp*sy;
+    forward[3] = -sp;
+    return forward;
+end
+
+local function doShit(t1, t2, m)
+    local t3 ={};
+    for i,v in ipairs(t1) do
+        t3[i] = v + (t2[i] * m);
+    end
+    return t3;
+end
+
+local function iHateMyself(value, color, text)
+
+    local forward = {};
+    local originX, originY, originZ = pLocal:GetAbsOrigin();
+    forward = AngleVectors({0, value, 0});
+    local end3D = doShit({ originX, originY, originZ }, forward, 25);
+    local w2sX1, w2sY1 = client.WorldToScreen(originX, originY, originZ);
+    local w2sX2, w2sY2 = client.WorldToScreen(end3D[1], end3D[2], end3D[3]);
+    draw.Color(color[1], color[2], color[3], color[4])
+
+    if w2sX1 and w2sY1 and w2sX2 and w2sY2 then
+        draw.Line(w2sX1, w2sY1, w2sX2, w2sY2)
+        local textW, textH = draw.GetTextSize(text);
+        draw.TextShadow( w2sX2-(textW/2), w2sY2-(textH/2), text)
+    end
+end
+
+callbacks.Register("Draw", function()
+
+    pLocal = entities.GetLocalPlayer();
+    lby = pLocal:GetProp("m_flLowerBodyYawTarget");
+    fx, fy = pLocal:GetProp("m_angEyeAngles");
+
+    if lastChoke and lastChoke <= globals.CurTime() - 1 then
+        choking = false;
+    end
+
+    if pLocal and pLocal:IsAlive() and enabled:GetValue()  then
+
+        if ry and choking then iHateMyself(ry, {25, 255, 25, 255}, "Last Choked") end
+        if fy then iHateMyself(fy, {255, 25, 25, 255}, "Networked") end
+        if fy2 then iHateMyself(fy2, {25, 25, 255, 255}, "Local Angle") end
+        if lby then iHateMyself(lby, {255, 255, 255, 255}, "Networked LBY") end
+    end
+end)
+
+callbacks.Register("CreateMove", function(pCmd)
+    if pLocal and pLocal:IsAlive() and enabled:GetValue() then
+
+        if not pCmd:GetSendPacket() then
+            rx, ry = pCmd:GetViewAngles();
+            choking = true;
+            lastChoke = globals.CurTime();
+        else
+            fx2, fy2 = pCmd:GetViewAngles()
         end
     end
 end)
@@ -488,63 +612,6 @@ end
 callbacks.Register("Draw", drawHook)
 callbacks.Register("AimbotTarget", aimbotTargetHook)
 callbacks.Register("DrawESP", drawEspHook)
-
------- Adaptive Hitboxes
-
-local adapcheck = gui.Checkbox(hvhgroupbox, "adapcheck", "Adaptive Hitboxes", false)
-local gui_set = gui.SetValue;
-local gui_get = gui.GetValue;
-local fpstotoggle = gui.Slider(hvhgroupbox, "fpstotoggle", "Fps Toggle", 100, 20, 1000)
-local frame_rate = 0.0
-local get_abs_fps = function()
-  frame_rate = 0.9 * frame_rate + (1.0 - 0.9) * globals.AbsoluteFrameTime()
-  return math.floor((1.0 / frame_rate) + 0.5)
-end
-
-function isFPSLow()
-   if gui.GetValue("adapcheck") == true then
-local w,h = draw.GetScreenSize();
-fps = get_abs_fps()
-if entities.GetLocalPlayer() ~= nil then
-    if fps <= gui.GetValue("fpstotoggle") then -- If fps is below the set value (slider) then it will turn adaptive hitboxes on and same if its above
-        draw.Color(200, 0, 0, 255)
-        draw.Text(w/w, (h/2), "Adaptive Hitboxes ON")
-        AdaptiveHitBoxON();
-    else
-        draw.Color(0, 255, 0, 255)
-        draw.Text(w/w, (h/2), "Adaptive Hitboxes OFF")
-        AdaptiveHitBoxOFF();
-    end
-end
-end
-
-function AdaptiveHitBoxON()
-    
-gui_set("rbot_pistol_hitbox_adaptive", 1);
-gui_set("rbot_smg_hitbox_adaptive", 1);
-gui_set("rbot_revolver_hitbox_adaptive", 1);
-gui_set("rbot_rifle_hitbox_adaptive", 1);
-gui_set("rbot_scout_hitbox_adaptive", 1);
-gui_set("rbot_sniper_hitbox_adaptive", 1);
-gui_set("rbot_autosniper_hitbox_adaptive", 1);
-gui_set("rbot_lmg_hitbox_adaptive", 1);
-end
-
-function AdaptiveHitBoxOFF()
-    
-gui_set("rbot_pistol_hitbox_adaptive", 0);
-gui_set("rbot_smg_hitbox_adaptive", 0);
-gui_set("rbot_revolver_hitbox_adaptive", 0);
-gui_set("rbot_rifle_hitbox_adaptive", 0);
-gui_set("rbot_scout_hitbox_adaptive", 0);
-gui_set("rbot_sniper_hitbox_adaptive", 0);
-gui_set("rbot_autosniper_hitbox_adaptive", 0);
-gui_set("rbot_lmg_hitbox_adaptive", 0);
-end
-end
-callbacks.Register( "Draw", "isFPSLow", isFPSLow);
-callbacks.Register( "Draw", "AdaptiveHitBoxOFF", AdaptiveHitBoxOFF);
-callbacks.Register( "Draw", "AdaptiveHitBoxON", AdaptiveHitBoxON);
 
 ----- Auto Buy
 
@@ -780,7 +847,6 @@ function kickEventHandler(event)
         if (self_pid == voter_eid and vote_option == 1) then
             kick_getting_kicked = true;
 
-            -- We're voting NO, which means somebody else already voted yes
             kick_yes_voters = 1;
         end
 
